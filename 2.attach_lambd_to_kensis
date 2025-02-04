@@ -1,0 +1,5 @@
+aws lambda create-event-source-mapping \
+    --event-source-arn arn:aws:kinesis:us-east-1:123456789012:stream/TwitterStream \
+    --function-name ProcessTweetsLambda \
+    --batch-size 10 \
+    --starting-position LATEST
