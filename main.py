@@ -2,9 +2,7 @@ from twitter_client import TwitterClient
 from kinesis_data_stream import KinesisDataStream as kds
 
 
-
-
-
+#add keyds here
 
 client = TwitterClient(BEARER_TOKEN)
 
