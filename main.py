@@ -2,11 +2,14 @@ from twitter_client import TwitterClient
 from kinesis_data_stream import KinesisDataStream as kds
 
 
+
+
+#git ignore file
 #add keyds here
 
 client = TwitterClient(BEARER_TOKEN)
 
-tweets = client.get_real_time_tweets("Trump", 10)
+tweets = client.get_real_time_tweets("Samsung", 10)
 
 
 ds_client = kds(aws_access_key_id,aws_secret_access_key, region_name)
