@@ -4,9 +4,6 @@ from kinesis_data_stream import KinesisDataStream as kds
 
 
 
-#git ignore file
-#add keyds here
-
 client = TwitterClient(BEARER_TOKEN)
 
 tweets = client.get_real_time_tweets("Samsung", 10)
