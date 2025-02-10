@@ -3,6 +3,7 @@ import boto3
 import json
 import time
 from datetime import datetime
+import base64
 
 class KinesisDataStream:
 
@@ -31,12 +32,18 @@ class KinesisDataStream:
 
 
         try:
-            json_data = json.dumps({"tweet": data})
+            json_data = json.dumps({"tweet": data}).encode("utf-8")
             response = self.kinesis_client.put_record(
                 StreamName=stream_name,
                 Data=json_data,
                 PartitionKey="partition-1"
             )
+            failed_count = response.get("FailedRecordCount", 0)
+            if failed_count > 0:
+                    print(f"{failed_count} records failed to send!")
+                    for i, record in enumerate(response["Records"]):
+                             if "ErrorCode" in record:
+                                 print(f"Failed record {i}: {record}")
             print(f"Tweet sent to Kinesis: {data}")
         
         except Exception as e:
@@ -51,51 +58,87 @@ class KinesisDataStream:
                 for line in file:
                     tweet_data = json.loads(line.strip())  # Read each line
                     batch.append({
-                        'Data': json.dumps(tweet_data),
+                        'Data': json.dumps(tweet_data).encode("utf-8"),
                         'PartitionKey': 'partition-1'
                     })
 
                     # Send batch when batch size is met
                     if len(batch) >= batch_size:
-                        self.kinesis_client.put_records(StreamName=stream_name, Records=batch)
-                        print(f"Sent {len(batch)} tweets to Kinesis.")
-                        batch = []  # Reset batch
+                        response = self.kinesis_client.put_records(StreamName=stream_name, Records=batch)
+                        print(f"Sent {len(batch)} tweets to Kinesis. Response: {response}")
+                        failed_count = response.get("FailedRecordCount", 0)
+                        if failed_count > 0:
+                            print(f"{failed_count} records failed to send!")
+                        batch = []
                         time.sleep(2)  # Prevent AWS throttling
 
                 # Send remaining tweets
                 if batch:
-                    self.kinesis_client.put_records(StreamName=stream_name, Records=batch)
-                    print(f"Sent {len(batch)} remaining tweets to Kinesis.")
+                    response = self.kinesis_client.put_records(StreamName=stream_name, Records=batch)
+                    print(f"Sent {len(batch)} remaining tweets to Kinesis. Response: {response}")
+                    failed_count = response.get("FailedRecordCount", 0)
+                    if failed_count > 0:
+                       print(f"{failed_count} records failed to send!")
+                       for i, record in enumerate(response["Records"]):
+                            if "ErrorCode" in record:
+                                 print(f"Failed record {i}: {record}")
 
         except Exception as e:
             print(f"Error sending tweets: {e}")
 
 
 
-    def read_from_kinesis(self,stream_name):
-        try:
-                response = self.kinesis_client.describe_stream(StreamName=stream_name)
-                shard_id = response["StreamDescription"]["Shards"][0]["ShardId"]
 
+    def read_from_kinesis(self, stream_name):
+       
+        try:
+
+            # Get shard ID
+            response = self.kinesis_client.describe_stream(StreamName=stream_name)
+            shards = response["StreamDescription"]["Shards"]
+            if not shards:
+                print(f"No shards found in stream '{stream_name}'.")
+                return
+
+            for shard in shards:
+                shard_id = shard["ShardId"]
+                print(f"Using Shard ID: {shard_id}")
+
+                # Get shard iterator (TRIM_HORIZON = start from the oldest record)
                 iterator_response = self.kinesis_client.get_shard_iterator(
                     StreamName=stream_name,
                     ShardId=shard_id,
-                    ShardIteratorType="LATEST"
+                    ShardIteratorType="TRIM_HORIZON"
                 )
-                shard_iterator = iterator_response["ShardIterator"]
+                shard_iterator = iterator_response.get("ShardIterator")
 
+                if not shard_iterator:
+                    print("No shard iterator found.")
+                    continue
 
-                while True:
-                        records_response = self.kinesis_client.get_records(ShardIterator=shard_iterator, Limit=10)
-                        shard_iterator = records_response.get("NextShardIterator", None)
+                # Continuously fetch records
+                while shard_iterator:
+                    records_response = self.kinesis_client.get_records(ShardIterator=shard_iterator, Limit=10)
+                    print(f"Records response: {records_response}")
+                    shard_iterator = records_response.get("NextShardIterator")
 
-                        for record in records_response["Records"]:
-                            tweet_data = json.loads(record["Data"])
-                            print(f"Received tweet: {tweet_data['tweet']}")
+                    # Process records
+                    for record in records_response.get("Records", []):
+                        # Decode the bytes data to a string
+                        raw_data = record["Data"].decode("utf-8")
+                        print(f"Raw data: {raw_data}")
 
-                        if not shard_iterator:
-                            break  # Exit loop if there are no more records
+                        # Parse the JSON string
+                        try:
+                            tweet_data = json.loads(raw_data)
+                            print(f"Received tweet: {tweet_data}")
+                        except json.JSONDecodeError as e:
+                            print(f"Error parsing JSON data: {e}")
+
+                    # Prevent excessive API calls (avoid throttling)
+                    time.sleep(1)
+
         except Exception as e:
             print(f"Error reading from Kinesis: {e}")
-
-       
+            import traceback
+            traceback.print_exc()
