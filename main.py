@@ -2,7 +2,7 @@ from twitter_client import TwitterClient
 from kinesis_data_stream import KinesisDataStream as kds
 
 
-
+#Erro: straming not wirtten in the streaming data
 
 client = TwitterClient(BEARER_TOKEN)
 
@@ -19,6 +19,7 @@ for stream in streams:
 #ds_client.create_stream("twitter-stream-fetch")
 
 #tweets = ds_client.send_tweets_from_file("twitter-stream-fetch", "deep seek_tweets.json")
+
 
 ds_client.send(tweets, "twitter-stream-fetch")
 
