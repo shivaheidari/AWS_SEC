@@ -1,3 +1,9 @@
 twitter_env/
 secrets.txt
 main.py
+
+aws_key.pem
+
+awskey.pem
+
+emotionapi.tar
